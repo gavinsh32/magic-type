@@ -31,6 +31,11 @@ last_key_pressed_display = None # For displaying on screen
 collected_data = []
 data_id_counter = 0
 
+# Video saving setup
+output_video_filename = "labeling_feed.mp4" # Widely compatible format
+video_writer = None
+video_fps = 30.0 # Should ideally match or be close to the data collection FPS
+
 while cap.isOpened():
     current_key_for_data = None # Key to be stored for this frame's data point
     
@@ -39,6 +44,15 @@ while cap.isOpened():
     if not ret:
         print("Error: Could not read frame from webcam.")
         break
+
+    # Create a black image with the same dimensions as the frame
+    height, width, _ = frame.shape
+    black_background_frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Initialize VideoWriter if it hasn't been already (needs frame dimensions)
+    if video_writer is None:
+        fourcc = cv.VideoWriter_fourcc(*'mp4v') # Codec for MP4
+        video_writer = cv.VideoWriter(output_video_filename, fourcc, video_fps, (width, height))
 
     # Convert the BGR image to RGB
     rgb_frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
@@ -63,7 +77,7 @@ while cap.isOpened():
 
             # Draw the landmarks on the frame for visualization
             mp_drawing.draw_landmarks(
-                frame,
+                black_background_frame,
                 hand_landmarks,
                 mp_hands.HAND_CONNECTIONS,
                 mp_drawing_styles.get_default_hand_landmarks_style(),
@@ -72,10 +86,14 @@ while cap.isOpened():
 
     # Display the last key pressed on the frame
     if last_key_pressed_display:
-        cv.putText(frame, f"Last Key: {last_key_pressed_display}", (10, 40), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv.LINE_AA)
+        cv.putText(black_background_frame, f"Last Key: {last_key_pressed_display}", (10, 40), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv.LINE_AA)
 
     # Display the frame
-    cv.imshow('Hand Tracking', frame)
+    cv.imshow('Hand Tracking', black_background_frame)
+
+    # Write the frame to the video file
+    if video_writer is not None:
+        video_writer.write(black_background_frame)
 
     # Read keyboard input using cv.waitKey
     key_code = cv.waitKey(DATA_COLLECTION_DELAY_MS) & 0xFF
@@ -114,6 +132,11 @@ while cap.isOpened():
 
 hands.close()
 cap.release()
+
+if video_writer is not None:
+    video_writer.release()
+    print(f"Labeling video feed saved to {output_video_filename}")
+
 cv.destroyAllWindows()
 
 # Save the collected data to a JSON file
